@@ -4,21 +4,54 @@ import pandas as pd
 import time
 
 # ============ Gemini Setup ============
-API_KEY = st.secrets["API_KEY"]
+API_KEY = st.secrets["API_KEY"]  # Securely load from Streamlit secrets
 genai.configure(api_key=API_KEY)
 model = genai.GenerativeModel("gemini-2.5-flash")
-
-MAX_PRICE_LIMIT = 999999999999999999999999999999999999999999999999999999999999999
 
 # ============ Streamlit UI ============
 st.set_page_config(page_title="AI ProductFinder", page_icon="🛒", layout="wide")
 
+# --- Define Pages for Navigation ---
+pages = [
+    st.Page("project.py", title="Product Finder", icon="🛒", url_path="product"),
+    st.Page("project.py", title="Project Info", icon="ℹ️", url_path="info"),
+    st.Page("project.py", title="About Us", icon="👥", url_path="about"),
+]
+
 # --- Sidebar Navigation ---
-pages = ["Product Finder", "Project Info", "About Us"]
-pg = st.sidebar.radio("🧭 Navigation", pages)
+with st.sidebar:
+    st.markdown(
+        """
+        <style>
+        div[data-testid="stSidebarNav"]::before {
+            content: "🧭 Navigation";
+            font-size: 24px;
+            font-weight: 600;
+            margin-left: 16px;
+            margin-top: 10px;
+            display: block;
+            padding-bottom: 6px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+    pg = st.navigation(pages)
+
+# ============ Constants ============
+MAX_SAFE_INT = float(9007199254740991)  # JS max safe int as float
+
+# --- Utility Functions ---
+def update_slider():
+    st.session_state.slider = (st.session_state.numeric1, st.session_state.numeric2)
+
+def update_numin():
+    st.session_state.numeric1 = st.session_state.slider[0]
+    st.session_state.numeric2 = st.session_state.slider[1]
 
 # --- Page Logic ---
-if pg == "Project Info":
+if pg.title == "Project Info":
     st.title("ℹ️ Project Information")
     st.markdown("""
     **AI ProductFinder** is an AI-powered tool to get product recommendations based on:
@@ -37,7 +70,7 @@ if pg == "Project Info":
     st.info("Use the sample CSV above to quickly test our project.")
     st.stop()
 
-elif pg == "About Us":
+elif pg.title == "About Us":
     st.title("About Us")
     st.write("Meet the team behind AI ProductFinder:")
     team = [
@@ -92,7 +125,6 @@ else:
     if "products" not in st.session_state:
         st.session_state.products = {}
 
-    # CSV Upload
     st.subheader("📂 Upload Products via CSV (optional)")
     uploaded_file = st.file_uploader("Upload CSV (columns: product_name, price_min, price_max, rating, context, constraints)", type=["csv"])
     if uploaded_file:
@@ -106,7 +138,6 @@ else:
             }
         st.success("✅ Products added from CSV!")
 
-    # Manual Product Input
     with st.expander("➕ Add a Product Manually", expanded=False):
         if "product_form" not in st.session_state:
             st.session_state.product_form = {
@@ -131,50 +162,45 @@ else:
             form["price_mode"] = st.radio("💰 Price Input", ["Set Price Range", "No Price Limit"], horizontal=True)
             if form["price_mode"] == "Set Price Range":
                 col1, col2 = st.columns(2)
+
+                # Clamp values to avoid +/- bugs
+                form["min_price"] = max(0.0, min(form["min_price"], MAX_SAFE_INT))
+                form["max_price"] = max(1.0, min(form["max_price"], MAX_SAFE_INT))
+
                 with col1:
                     form["min_price"] = st.number_input(
                         "Min Price",
                         min_value=0.0,
-                        max_value=MAX_PRICE_LIMIT,
-                        step=1.0,
-                        value=form["min_price"]
+                        max_value=MAX_SAFE_INT,
+                        value=float(form["min_price"]),
+                        step=0.01,
+                        format="%.2f",
+                        key="min_price_input",
                     )
+
                 with col2:
-                    no_max_limit = st.checkbox(
-                        "No max price limit",
-                        value=(form["max_price"] == MAX_PRICE_LIMIT)
+                    form["max_price"] = st.number_input(
+                        "Max Price",
+                        min_value=1.0,
+                        max_value=MAX_SAFE_INT,
+                        value=float(form["max_price"]),
+                        step=0.01,
+                        format="%.2f",
+                        key="max_price_input",
                     )
-                    if no_max_limit:
-                        form["max_price"] = MAX_PRICE_LIMIT
-                        st.number_input(
-                            "Max Price",
-                            min_value=form["min_price"],
-                            max_value=MAX_PRICE_LIMIT,
-                            value=form["max_price"],
-                            step=1.0,
-                            disabled=True
-                        )
-                    else:
-                        min_for_max_price = max(form["min_price"], 1)
-                        form["max_price"] = st.number_input(
-                            "Max Price",
-                            min_value=min_for_max_price,
-                            max_value=MAX_PRICE_LIMIT,
-                            value=form["max_price"],
-                            step=1.0,
-                            disabled=False
-                        )
-            else:
-                form["min_price"] = 0.0
-                form["max_price"] = None
-            if form["step"] == 2:
-                time.sleep(3)
-                form["step"] = 3
+
+                # Prevent min > max
+                if form["min_price"] > form["max_price"]:
+                    form["max_price"] = form["min_price"]
+
+                if form["step"] == 2:
+                    time.sleep(3)
+                    form["step"] = 3
 
         if form["step"] >= 3:
             form["rating_mode"] = st.radio("⭐ Rating Input", ["Stars (whole numbers)", "Numeric (decimals allowed)"], horizontal=True)
             if form["rating_mode"] == "Stars (whole numbers)":
-                form["rating"] = st.slider("Rating (stars)", 1, 5, int(form["rating"]))
+                form["rating"] = st.feedback("stars") or form["rating"]
             else:
                 form["rating"] = st.number_input("Numeric Rating", min_value=1.0, max_value=5.0, step=0.1, value=float(form["rating"]))
             if form["step"] == 3:
@@ -198,7 +224,6 @@ else:
                     "constraints": form["constraints"]
                 }
                 st.success(f"Added {form['name']} to the list!")
-                # Reset form
                 st.session_state.product_form = {
                     "step": 1,
                     "name": "",
@@ -214,7 +239,7 @@ else:
     if st.session_state.products:
         st.subheader("🛍 Your Product List")
         for name, details in st.session_state.products.items():
-            price_text = f"${details['price_range'][0]} - ${details['price_range'][1]}" if details['price_range'] else "No price limit"
+            price_text = f"${details['price_range'][0]:.2f} - ${details['price_range'][1]:.2f}" if details['price_range'] else "No price limit"
             st.markdown(f"""
             **{name}**
             - Price: {price_text}
