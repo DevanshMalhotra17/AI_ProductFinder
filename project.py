@@ -20,23 +20,32 @@ pages = [
 
 # --- Sidebar Navigation ---
 with st.sidebar:
+    # Add Logo (centered at top)
+    st.markdown(
+        """
+        <div style="text-align:center; margin-bottom: 10px;">
+            <img src="https://raw.githubusercontent.com/DevanshMalhotra17/AI_ProductFinder/main/Logo_ProductFinder.png" width="180">
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    # Enlarge navigation buttons and remove old navigation header
     st.markdown(
         """
         <style>
         div[data-testid="stSidebarNav"]::before {
-            content: "🧭 Navigation";
-            font-size: 24px;
-            font-weight: 600;
-            margin-left: 16px;
-            margin-top: 10px;
-            display: block;
-            padding-bottom: 6px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+            content: none !important;
+        }
+        div[data-testid="stSidebarNav"] button {
+            font-size: 18px !important;
+            text-align: center !important;
         }
         </style>
         """,
         unsafe_allow_html=True
     )
+
     pg = st.navigation(pages)
 
 # ============ Constants ============
@@ -90,18 +99,20 @@ elif pg.title == "About Us":
             "image": "https://via.placeholder.com/150",
             "contributions": """Developed AI integration: dual API request system for recommendations and product links.
             Optimized backend logic for accurate outputs.""",
-            "summary": "",
-            "linkedin": "https://www.linkedin.com/",
-            "github": "https://github.com/"
+            "summary": """Inspired by coding since middle school and have a decent understanding of both Java, Python, and HTML&CSS. 
+            Holds certifications in Python and HTML&CSS and completed an internship at BetterMind Labs focusing on creating AI.""",
+            "linkedin": "https://www.linkedin.com/in/haoxuan-liu",
+            "github": "https://github.com/hxliufl"
         },
         {
             "name": "Matthew Yu",
             "image": "https://via.placeholder.com/150",
             "contributions": """Enhanced input functionality: price range sliders and synchronization mechanisms.
             Improved overall UX for seamless integration.""",
-            "summary": "",
-            "linkedin": "https://www.linkedin.com/",
-            "github": "https://github.com/"
+            "summary": """Experienced in Java, Python, and Wolfram Language, novice in HTML and CSS. 
+            Intern at BetterMind Labs with a focus on applying AI systems to real life.""",
+            "linkedin": "https://www.linkedin.com/in/matthew-yu-6902a3302/",
+            "github": "https://github.com/mattY-08"
         }
     ]
     for member in team:
