@@ -9,11 +9,44 @@ genai.configure(api_key=API_KEY)
 model = genai.GenerativeModel("gemini-2.5-flash")
 
 # ============ Streamlit UI ============
-st.set_page_config(page_title="AI Product Recommender", page_icon="🛒", layout="wide")
+st.set_page_config(page_title="AI ProductFinder", page_icon="🛒", layout="wide")
 
-# Sidebar Navigation
+# --- Custom CSS for Sidebar Tabs ---
+st.markdown("""
+    <style>
+    .sidebar .stButton button {
+        width: 100%;
+        text-align: left;
+        background-color: transparent;
+        color: white;
+        border: none;
+        font-size: 16px;
+        padding: 6px 12px;
+        border-radius: 6px;
+    }
+    .sidebar .stButton button:hover {
+        background-color: #333;
+    }
+    .active-tab {
+        background-color: #444 !important;
+        font-weight: bold !important;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
+# Sidebar Navigation (Clickable)
 st.sidebar.title("📌 Navigation")
-page = st.sidebar.radio("Go to:", ["Product Finder", "Project Info", "About Us"])
+tabs = ["Product Finder", "Project Info", "About Us"]
+
+if "active_tab" not in st.session_state:
+    st.session_state.active_tab = "Product Finder"
+
+for tab in tabs:
+    button_style = "active-tab" if tab == st.session_state.active_tab else ""
+    if st.sidebar.button(tab, key=tab):
+        st.session_state.active_tab = tab
+
+page = st.session_state.active_tab
 
 # --- Utility Functions ---
 def update_slider():
@@ -38,10 +71,8 @@ if page == "Project Info":
     - Add products manually
     - Optimized AI prompt (no web search)
     """)
-
     sample_csv = "product_name,price_min,price_max,rating,context,constraints\nDog food bowl,5,15,4.5,For small dogs,Must be stainless steel\nLaptop,500,1200,4.0,For gaming,Under 2kg"
     st.download_button("📥 Download Sample CSV", sample_csv, "products_template.csv", "text/csv")
-
     st.info("Use the sample CSV above to quickly test our project.")
     st.stop()
 
@@ -49,11 +80,10 @@ if page == "Project Info":
 elif page == "About Us":
     st.title("About Us")
     st.write("Meet the team behind AI ProductFinder:")
-
     team = [
         {
             "name": "Devansh Malhotra",
-            "image": "assets/DEVANSHMALHOTRA.jpg",
+            "image": "https://raw.githubusercontent.com/DevanshMalhotra17/AI_ProductFinder/main/assets/DevanshMalhotra.jpg",
             "contributions": """Led UI design and core feature implementation: CSV upload, context input, constraint fields, 
             and AI prompt optimization. Ensured intuitive and user-friendly workflow.""",
             "summary": """Aspiring AI engineer with strong experience in software development, algorithms, and robotics 
@@ -81,7 +111,6 @@ elif page == "About Us":
             "github": "https://github.com/"
         }
     ]
-
     for member in team:
         st.markdown("---")
         col1, col2 = st.columns([1, 3])
@@ -93,7 +122,6 @@ elif page == "About Us":
             if member["summary"]:
                 st.write(f"**Professional Summary:** {member['summary']}")
             st.markdown(f"[LinkedIn]({member['linkedin']}) | [GitHub]({member['github']})")
-
     st.stop()
 
 # --- Product Finder Page ---
@@ -118,7 +146,6 @@ if uploaded_file:
         }
     st.success("✅ Products added from CSV!")
 
-# --- Manual Product Input ---
 # --- Manual Product Input (Step-by-step) ---
 with st.expander("➕ Add a Product Manually", expanded=False):
     if "product_form" not in st.session_state:
@@ -136,13 +163,11 @@ with st.expander("➕ Add a Product Manually", expanded=False):
 
     form = st.session_state.product_form
 
-    # STEP 1: Product Name
     form["name"] = st.text_input("📝 Product Name", value=form["name"], placeholder="e.g. Dog food bowl")
     if form["name"] and form["step"] == 1:
-        time.sleep(1)  # ⏳ Delay before showing next step
+        time.sleep(1)
         form["step"] = 2
 
-    # STEP 2: Price Selection
     if form["step"] >= 2:
         form["price_mode"] = st.radio("💰 Price Input", ["Set Price Range", "No Price Limit"], horizontal=True)
         if form["price_mode"] == "Set Price Range":
@@ -152,37 +177,27 @@ with st.expander("➕ Add a Product Manually", expanded=False):
             with col2:
                 form["max_price"] = st.number_input("Max Price", value=form["max_price"])
         if form["step"] == 2:
-            time.sleep(3)  # ⏳ Delay before showing rating
+            time.sleep(3)
             form["step"] = 3
 
-    # STEP 3: Rating
     if form["step"] >= 3:
         form["rating_mode"] = st.radio("⭐ Rating Input", ["Stars (whole numbers)", "Numeric (decimals allowed)"], horizontal=True)
         if form["rating_mode"] == "Stars (whole numbers)":
             form["rating"] = st.feedback("stars") or form["rating"]
         else:
-            form["rating"] = st.number_input(
-                "Numeric Rating",
-                min_value=1.0,
-                max_value=5.0,
-                step=0.1,
-                value=float(form["rating"])
-            )
+            form["rating"] = st.number_input("Numeric Rating", min_value=1.0, max_value=5.0, step=0.1, value=float(form["rating"]))
         if form["step"] == 3:
             time.sleep(2)
             form["step"] = 4
 
-    # STEP 4: Context
     if form["step"] >= 4:
         form["context"] = st.text_input("📄 Context (optional)", value=form["context"], placeholder="e.g. For a small dog, dishwasher-safe")
         form["step"] = max(form["step"], 5)
 
-    # STEP 5: Constraints
     if form["step"] >= 5:
         form["constraints"] = st.text_input("⚠ Constraints (optional)", value=form["constraints"], placeholder="e.g. Must be eco-friendly")
         form["step"] = max(form["step"], 6)
 
-    # STEP 6: Add Button
     if form["step"] >= 6:
         if st.button("➕ Add Product"):
             st.session_state.products[form["name"]] = {
@@ -192,8 +207,6 @@ with st.expander("➕ Add a Product Manually", expanded=False):
                 "constraints": form["constraints"]
             }
             st.success(f"Added {form['name']} to the list!")
-
-            # Reset form for next product
             st.session_state.product_form = {
                 "step": 1,
                 "name": "",
@@ -206,8 +219,6 @@ with st.expander("➕ Add a Product Manually", expanded=False):
                 "constraints": ""
             }
 
-
-# --- Display Product List ---
 if st.session_state.products:
     st.subheader("🛍 Your Product List")
     for name, details in st.session_state.products.items():
@@ -220,17 +231,13 @@ if st.session_state.products:
         - Constraints: {details['constraints']}
         """)
 
-# --- Generate Recommendations ---
 if st.button("🔍 Generate Recommendations"):
     if st.session_state.products:
         with st.spinner("Finding the best products for you..."):
             prompt = "Recommend 5 products for each of the following items:\n"
             for name, details in st.session_state.products.items():
                 price_text = f"Price {details['price_range']}" if details['price_range'] else "No price limit"
-                prompt += (
-                    f"- {name}: {price_text}, Rating ≥ {details['rating']}, "
-                    f"Context: {details['context']}, Constraints: {details['constraints']}\n"
-                )
+                prompt += f"- {name}: {price_text}, Rating ≥ {details['rating']}, Context: {details['context']}, Constraints: {details['constraints']}\n"
             prompt += """
             Format the response in markdown with clear product cards:
             - Product Name
@@ -238,7 +245,6 @@ if st.button("🔍 Generate Recommendations"):
             - Rating
             - Why It Fits
             """
-
             response = model.generate_content([prompt])
             st.subheader("✅ Recommendations")
             st.markdown(response.text)
