@@ -7,7 +7,6 @@ import time
 API_KEY = st.secrets["API_KEY"]  # Securely load from Streamlit secrets
 genai.configure(api_key=API_KEY)
 model = genai.GenerativeModel("gemini-2.5-flash")
-
 # ============ Streamlit UI ============
 st.set_page_config(page_title="AI ProductFinder", page_icon="🛒", layout="wide")
 
@@ -20,26 +19,38 @@ pages = [
 
 # --- Sidebar Navigation ---
 with st.sidebar:
-    # Add Logo (centered at top)
-    st.markdown(
-        """
-        <div style="text-align:center; margin-bottom: 10px;">
-            <img src="https://raw.githubusercontent.com/DevanshMalhotra17/AI_ProductFinder/main/Logo_ProductFinder.png" width="180">
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-    # Enlarge navigation buttons and remove old navigation header
     st.markdown(
         """
         <style>
+        /* Insert logo above navigation buttons */
         div[data-testid="stSidebarNav"]::before {
-            content: none !important;
+            content: "";
+            display: block;
+            background-image: url('https://raw.githubusercontent.com/DevanshMalhotra17/AI_ProductFinder/main/Logo_ProductFinder.png');
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: left;
+            height: 70px;
+            margin-bottom: 20px;
+            margin-left: 52px;
         }
+
+        /* Remove default header above buttons */
+        div[data-testid="stSidebarNav"] > div:first-child {
+            display: none !important;
+        }
+
+        /* Style all navigation buttons */
         div[data-testid="stSidebarNav"] button {
             font-size: 18px !important;
             text-align: center !important;
+            color: white !important;
+        }
+
+        /* Highlight the Product Finder button with a unique color */
+        div[data-testid="stSidebarNav"] button[title="Product Finder"][aria-selected="true"] {
+            color: #1E90FF !important; /* Dodger blue for active Product Finder */
+            font-weight: bold !important;
         }
         </style>
         """,
@@ -47,6 +58,7 @@ with st.sidebar:
     )
 
     pg = st.navigation(pages)
+
 
 # ============ Constants ============
 MAX_SAFE_INT = float(9007199254740991)  # JS max safe int as float
@@ -96,7 +108,7 @@ elif pg.title == "About Us":
         },
         {
             "name": "Haoxuan Liu",
-            "image": "https://via.placeholder.com/150",
+            "image": "https://raw.githubusercontent.com/DevanshMalhotra17/AI_ProductFinder/main/assets/Haoxuan_Liu.jpg",
             "contributions": """Developed AI integration: dual API request system for recommendations and product links.
             Optimized backend logic for accurate outputs.""",
             "summary": """Inspired by coding since middle school and have a decent understanding of both Java, Python, and HTML&CSS. 
@@ -106,7 +118,7 @@ elif pg.title == "About Us":
         },
         {
             "name": "Matthew Yu",
-            "image": "https://via.placeholder.com/150",
+            "image": "https://raw.githubusercontent.com/DevanshMalhotra17/AI_ProductFinder/main/assets/Matthew_Yu.jpg",
             "contributions": """Enhanced input functionality: price range sliders and synchronization mechanisms.
             Improved overall UX for seamless integration.""",
             "summary": """Experienced in Java, Python, and Wolfram Language, novice in HTML and CSS. 
@@ -122,9 +134,9 @@ elif pg.title == "About Us":
             st.image(member["image"], width=250)
         with col2:
             st.subheader(member["name"])
-            st.write(f"**Contributions:** {member['contributions']}")
             if member["summary"]:
-                st.write(f"**Professional Summary:** {member['summary']}")
+                st.write(member["summary"])  # Removed "Professional Summary:"
+            st.write(f"**Contributions:** {member['contributions']}")
             st.markdown(f"[LinkedIn]({member['linkedin']}) | [GitHub]({member['github']})")
     st.stop()
 
@@ -174,7 +186,6 @@ else:
             if form["price_mode"] == "Set Price Range":
                 col1, col2 = st.columns(2)
 
-                # Clamp values to avoid +/- bugs
                 form["min_price"] = max(0.0, min(form["min_price"], MAX_SAFE_INT))
                 form["max_price"] = max(1.0, min(form["max_price"], MAX_SAFE_INT))
 
@@ -200,7 +211,6 @@ else:
                         key="max_price_input",
                     )
 
-                # Prevent min > max
                 if form["min_price"] > form["max_price"]:
                     form["max_price"] = form["min_price"]
 
