@@ -5,12 +5,12 @@ import time
 import re
 
 # ============ Gemini Setup ============
-API_KEY = st.secrets["API_KEY"]
+API_KEY = st.secrets["API_KEY"]  # Securely load from Streamlit secrets
 genai.configure(api_key=API_KEY)
 model = genai.GenerativeModel("gemini-2.5-flash")
 
 # ============ Streamlit UI ============
-st.set_page_config(page_title="AI ProductFinder", page_icon="🛒", layout="wide")
+st.set_page_config(page_title="AI ProductFinder", page_icon="https://raw.githubusercontent.com/DevanshMalhotra17/AI_ProductFinder/main/Logo_ProductFinder.png", layout="wide")
 
 # --- Define Pages for Navigation ---
 pages = [
@@ -68,12 +68,16 @@ def update_numin():
     st.session_state.numeric1 = st.session_state.slider[0]
     st.session_state.numeric2 = st.session_state.slider[1]
 
+def genai_response(prompt):
+    response = model.generate_content([prompt])
+    return re.findall(r"<(.*?)>\s*(https[^\~]+)~", response.text, re.DOTALL)
+
 # --- Output recommended products ---
 def get_out(products):
     prompt = "Recommend 5 products for each of the following items:\n"
     for name, details in products.items():
         price_text = f"{details['price_range']}" if details['price_range'] else "No price limit"
-        prompt += f"{name}: {price_text}, Rating >= {details['rating']}\n"
+        prompt += f"{name}: {price_text}, Rating >= {float(details['rating']):.1f}\n"
     prompt += """
     Format each product block as:
     <Product Name
@@ -89,8 +93,14 @@ def get_out(products):
     # Extract all product blocks using regex
     product_blocks = re.findall(r"<(.*?)>\s*(https[^\~]+)~", text, re.DOTALL)
 
-    if not product_blocks:
-        st.warning("⚠ No recommendations found. Try again.")
+    attempts = 0
+    recommendations = []
+    while not recommendations and attempts < 5:
+        recommendations = genai_response(prompt)
+        attempts += 1
+
+    if not recommendations:
+        st.warning("⚠ No recommendations found after multiple tries.")
         return
 
     # Display each product
@@ -102,6 +112,29 @@ def get_out(products):
                 st.write(line)  # Price, Rating, Why It Fits
             st.link_button("Shop", link)
             st.markdown("---")
+
+# --- Helper to extract products from uploaded CSV ---
+def extract_products(df):
+    products = {}
+    for _, row in df.iterrows():
+        name = str(row.get("product_name", "")).strip()
+        if not name:
+            continue
+        price_min = float(row.get("price_min", 0))
+        price_max = float(row.get("price_max", 0))
+        rating = float(row.get("rating", 0))
+        context = str(row.get("context", ""))
+        constraints = str(row.get("constraints", ""))
+
+        price_range = (price_min, price_max) if price_min and price_max else None
+
+        products[name] = {
+            "price_range": price_range,
+            "rating": rating,
+            "context": context,
+            "constraints": constraints
+        }
+    return products
 
 # --- Page Logic ---
 if pg.title == "Project Info":
@@ -183,14 +216,10 @@ else:
     uploaded_file = st.file_uploader("Upload CSV (columns: product_name, price_min, price_max, rating, context, constraints)", type=["csv"])
     if uploaded_file:
         df = pd.read_csv(uploaded_file)
-        for _, row in df.iterrows():
-            st.session_state.products[row["product_name"]] = {
-                "price_range": (row["price_min"], row["price_max"]),
-                "rating": row["rating"],
-                "context": row.get("context", ""),
-                "constraints": row.get("constraints", "")
-            }
+        st.session_state["uploaded_file"] = uploaded_file  # store for refresh
+        st.session_state.products = extract_products(df)
         st.success("✅ Products added from CSV!")
+
 
     with st.expander("➕ Add a Product Manually", expanded=False):
         if "product_form" not in st.session_state:
@@ -251,7 +280,10 @@ else:
         if form["step"] >= 3:
             form["rating_mode"] = st.radio("⭐ Rating Input", ["Stars (whole numbers)", "Numeric (decimals allowed)"], horizontal=True)
             if form["rating_mode"] == "Stars (whole numbers)":
-                form["rating"] = (st.feedback("stars") or form["rating"] - 1) + 1            
+                star_rating = st.feedback("stars")
+                if star_rating is not None:
+                    form["rating"] = float(star_rating + 1)
+
             else:
                 form["rating"] = st.number_input("Numeric Rating", min_value=1.0, max_value=5.0, step=0.1, value=float(form["rating"]))
             if form["step"] == 3:
@@ -298,11 +330,32 @@ else:
             - Constraints: {details['constraints']}
             """)
 
-    if st.button("🔍 Generate Recommendations"):
-        if st.session_state.products:
-            with st.spinner("Finding the best products for you..."):
-                get_out(st.session_state.products)
-            # ✅ Clear AFTER showing recommendations
+    colA, colC = st.columns([6, 1])
+    with colA:
+        if st.button("🔍 Generate Recommendations"):
+            if st.session_state.products:
+                with st.spinner("Finding the best products for you..."):
+                    get_out(st.session_state.products)
+            else:
+                st.warning("Please add at least one product.")
+
+    with colC:
+        if st.button("🔄 Refresh Searches"):
             st.session_state.products = {}
-        else:
-            st.warning("Please add at least one product.")
+
+            if "uploaded_file" in st.session_state and st.session_state["uploaded_file"] is not None:
+                uploaded_file = st.session_state["uploaded_file"]
+
+                try:
+                    df = pd.read_csv(uploaded_file)
+                    if df.empty:
+                        st.warning("Uploaded file is empty.")
+                    else:
+                        st.session_state.products = extract_products(df)
+                        st.success("Refreshed product list from uploaded file.")
+                except pd.errors.EmptyDataError:
+                    st.error("Uploaded file has no readable data.")
+                except Exception as e:
+                    st.error(f"An error occurred while reading the file: {e}")
+            else:
+                st.success("Cleared product list.")
