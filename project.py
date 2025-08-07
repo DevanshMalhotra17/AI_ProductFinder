@@ -2,11 +2,13 @@ import streamlit as st
 import google.generativeai as genai
 import pandas as pd
 import time
+import re
 
 # ============ Gemini Setup ============
-API_KEY = st.secrets["API_KEY"]  # Securely load from Streamlit secrets
+API_KEY = st.secrets["API_KEY"]
 genai.configure(api_key=API_KEY)
 model = genai.GenerativeModel("gemini-2.5-flash")
+
 # ============ Streamlit UI ============
 st.set_page_config(page_title="AI ProductFinder", page_icon="🛒", layout="wide")
 
@@ -22,7 +24,6 @@ with st.sidebar:
     st.markdown(
         """
         <style>
-        /* Insert logo above navigation buttons */
         div[data-testid="stSidebarNav"]::before {
             content: "";
             display: block;
@@ -35,21 +36,18 @@ with st.sidebar:
             margin-left: 52px;
         }
 
-        /* Remove default header above buttons */
         div[data-testid="stSidebarNav"] > div:first-child {
             display: none !important;
         }
 
-        /* Style all navigation buttons */
         div[data-testid="stSidebarNav"] button {
             font-size: 18px !important;
             text-align: center !important;
             color: white !important;
         }
 
-        /* Highlight the Product Finder button with a unique color */
         div[data-testid="stSidebarNav"] button[title="Product Finder"][aria-selected="true"] {
-            color: #1E90FF !important; /* Dodger blue for active Product Finder */
+            color: #1E90FF !important;
             font-weight: bold !important;
         }
         </style>
@@ -59,9 +57,8 @@ with st.sidebar:
 
     pg = st.navigation(pages)
 
-
 # ============ Constants ============
-MAX_SAFE_INT = float(9007199254740991)  # JS max safe int as float
+MAX_SAFE_INT = float(9007199254740991)
 
 # --- Utility Functions ---
 def update_slider():
@@ -70,6 +67,41 @@ def update_slider():
 def update_numin():
     st.session_state.numeric1 = st.session_state.slider[0]
     st.session_state.numeric2 = st.session_state.slider[1]
+
+# --- Output recommended products ---
+def get_out(products):
+    prompt = "Recommend 5 products for each of the following items:\n"
+    for name, details in products.items():
+        price_text = f"{details['price_range']}" if details['price_range'] else "No price limit"
+        prompt += f"{name}: {price_text}, Rating >= {details['rating']}\n"
+    prompt += """
+    Format each product block as:
+    <Product Name
+    Estimated Price: X
+    Rating: X
+    Why It Fits: X>
+    Then add the Google search link for the product followed by '~'
+    """
+
+    LLM_response = model.generate_content([prompt])
+    text = LLM_response.text
+
+    # Extract all product blocks using regex
+    product_blocks = re.findall(r"<(.*?)>\s*(https[^\~]+)~", text, re.DOTALL)
+
+    if not product_blocks:
+        st.warning("⚠ No recommendations found. Try again.")
+        return
+
+    # Display each product
+    for block, link in product_blocks:
+        lines = [line.strip() for line in block.split("\n") if line.strip()]
+        if lines:
+            st.markdown(f"### {lines[0]}")  # Product Name
+            for line in lines[1:]:
+                st.write(line)  # Price, Rating, Why It Fits
+            st.link_button("Shop", link)
+            st.markdown("---")
 
 # --- Page Logic ---
 if pg.title == "Project Info":
@@ -135,13 +167,12 @@ elif pg.title == "About Us":
         with col2:
             st.subheader(member["name"])
             if member["summary"]:
-                st.write(member["summary"])  # Removed "Professional Summary:"
+                st.write(member["summary"])
             st.write(f"**Contributions:** {member['contributions']}")
             st.markdown(f"[LinkedIn]({member['linkedin']}) | [GitHub]({member['github']})")
     st.stop()
 
 else:
-    # --- Product Finder Page ---
     st.title("AI ProductFinder")
     st.write("Get AI-powered product recommendations based on your budget, context, and constraints.")
 
@@ -215,17 +246,15 @@ else:
                     form["max_price"] = form["min_price"]
 
                 if form["step"] == 2:
-                    time.sleep(3)
                     form["step"] = 3
 
         if form["step"] >= 3:
             form["rating_mode"] = st.radio("⭐ Rating Input", ["Stars (whole numbers)", "Numeric (decimals allowed)"], horizontal=True)
             if form["rating_mode"] == "Stars (whole numbers)":
-                form["rating"] = st.feedback("stars") or form["rating"]
+                form["rating"] = (st.feedback("stars") or form["rating"] - 1) + 1            
             else:
                 form["rating"] = st.number_input("Numeric Rating", min_value=1.0, max_value=5.0, step=0.1, value=float(form["rating"]))
             if form["step"] == 3:
-                time.sleep(2)
                 form["step"] = 4
 
         if form["step"] >= 4:
@@ -258,7 +287,7 @@ else:
                 }
 
     if st.session_state.products:
-        st.subheader("🛍 Your Product List")
+        st.subheader("Your Product List")
         for name, details in st.session_state.products.items():
             price_text = f"${details['price_range'][0]:.2f} - ${details['price_range'][1]:.2f}" if details['price_range'] else "No price limit"
             st.markdown(f"""
@@ -272,19 +301,8 @@ else:
     if st.button("🔍 Generate Recommendations"):
         if st.session_state.products:
             with st.spinner("Finding the best products for you..."):
-                prompt = "Recommend 5 products for each of the following items:\n"
-                for name, details in st.session_state.products.items():
-                    price_text = f"Price {details['price_range']}" if details['price_range'] else "No price limit"
-                    prompt += f"- {name}: {price_text}, Rating ≥ {details['rating']}, Context: {details['context']}, Constraints: {details['constraints']}\n"
-                prompt += """
-                Format the response in markdown with clear product cards:
-                - Product Name
-                - Estimated Price
-                - Rating
-                - Why It Fits
-                """
-                response = model.generate_content([prompt])
-                st.subheader("✅ Recommendations")
-                st.markdown(response.text)
+                get_out(st.session_state.products)
+            # ✅ Clear AFTER showing recommendations
+            st.session_state.products = {}
         else:
             st.warning("Please add at least one product.")
