@@ -3,9 +3,10 @@ import google.generativeai as genai
 import pandas as pd
 import time
 import re
+import io
 
 # ============ Gemini Setup ============
-API_KEY = st.secrets["API_KEY"]  # Securely load from Streamlit secrets
+API_KEY = st.secrets["API_KEY"]
 genai.configure(api_key=API_KEY)
 model = genai.GenerativeModel("gemini-2.5-flash")
 
@@ -75,17 +76,35 @@ def genai_response(prompt):
 # --- Output recommended products ---
 def get_out(products):
     prompt = "Recommend 5 products for each of the following items:\n"
+    # build a detailed per-item line that includes price, rating, context, and constraints (if any)
     for name, details in products.items():
-        price_text = f"{details['price_range']}" if details['price_range'] else "No price limit"
-        prompt += f"{name}: {price_text}, Rating >= {float(details['rating']):.1f}\n"
-    prompt += """
-    Format each product block as:
-    <Product Name
-    Estimated Price: X
-    Rating: X
-    Why It Fits: X>
-    Then add the Google search link for the product followed by '~'
-    """
+        price_text = f"{details['price_range']}" if details.get('price_range') else "No price limit"
+        rating_text = f"{float(details.get('rating', 0)):.1f}"
+        context = (details.get('context') or "").strip()
+        constraints = (details.get('constraints') or "").strip()
+
+        # build the single-line description for the LLM
+        item_line = f"{name}: Price = {price_text}, Minimum rating = {rating_text}"
+        if context:
+            item_line += f", Context = {context}"
+        if constraints:
+            item_line += f", Constraints = {constraints}"
+        prompt += item_line + "\n"
+
+    # explicit instructions to the model: use context/constraints to filter/prioritize recommendations
+    prompt += (
+        "\nFor each input item above, use the provided Context and Constraints to filter and prioritize "
+        "recommendations. If Constraints conflict with available products, prefer products that match "
+        "constraints and mention tradeoffs in 'Why It Fits'. Group recommendations under the original "
+        "product name. \n\n"
+        "Format each product block exactly like this (no extra text):\n"
+        "<Product Name\n"
+        "Estimated Price: X\n"
+        "Rating: X\n"
+        "Why It Fits: X>\n"
+        "After each product block add the Google search link for the product followed by '~'\n"
+    )
+
 
     LLM_response = model.generate_content([prompt])
     text = LLM_response.text
@@ -110,7 +129,7 @@ def get_out(products):
             st.markdown(f"### {lines[0]}")  # Product Name
             for line in lines[1:]:
                 st.write(line)  # Price, Rating, Why It Fits
-            st.link_button("Shop", link)
+            st.link_button("Browse", link)
             st.markdown("---")
 
 # --- Helper to extract products from uploaded CSV ---
@@ -215,10 +234,27 @@ else:
     st.subheader("📂 Upload Products via CSV (optional)")
     uploaded_file = st.file_uploader("Upload CSV (columns: product_name, price_min, price_max, rating, context, constraints)", type=["csv"])
     if uploaded_file:
-        df = pd.read_csv(uploaded_file)
-        st.session_state["uploaded_file"] = uploaded_file  # store for refresh
-        st.session_state.products = extract_products(df)
-        st.success("✅ Products added from CSV!")
+        try:
+            try:
+                uploaded_file.seek(0)
+            except Exception:
+                pass
+
+            df = pd.read_csv(uploaded_file)
+            if df.empty:
+                st.error("Uploaded file is empty or has no valid rows.")
+            else:
+                # cache parsed dataframe and raw file bytes for later refresh
+                st.session_state["uploaded_df"] = df.copy()
+                st.session_state["uploaded_file_bytes"] = uploaded_file.getvalue()
+                # use df to populate products immediately
+                st.session_state.products = extract_products(df)
+                st.success("✅ Products added from CSV!")
+        except pd.errors.EmptyDataError:
+            st.error("Uploaded file has no readable data (EmptyDataError). Make sure it's a valid CSV with headers.")
+        except Exception as e:
+            st.error(f"Error reading uploaded CSV: {e}")
+
 
 
     with st.expander("➕ Add a Product Manually", expanded=False):
@@ -330,7 +366,7 @@ else:
             - Constraints: {details['constraints']}
             """)
 
-    colA, colC = st.columns([6, 1])
+    colA, colC = st.columns([7, 1])
     with colA:
         if st.button("🔍 Generate Recommendations"):
             if st.session_state.products:
@@ -340,22 +376,21 @@ else:
                 st.warning("Please add at least one product.")
 
     with colC:
-        if st.button("🔄 Refresh Searches"):
+        if st.button("🔄 Reset"):
             st.session_state.products = {}
+            st.session_state["uploaded_df"] = None
+            st.session_state["uploaded_file_bytes"] = None
 
-            if "uploaded_file" in st.session_state and st.session_state["uploaded_file"] is not None:
-                uploaded_file = st.session_state["uploaded_file"]
+            st.session_state.product_form = {
+                "step": 1,
+                "name": "",
+                "price_mode": "Set Price Range",
+                "min_price": 0.0,
+                "max_price": 500.0,
+                "rating_mode": "Stars",
+                "rating": 4,
+                "context": "",
+                "constraints": ""
+            }
 
-                try:
-                    df = pd.read_csv(uploaded_file)
-                    if df.empty:
-                        st.warning("Uploaded file is empty.")
-                    else:
-                        st.session_state.products = extract_products(df)
-                        st.success("Refreshed product list from uploaded file.")
-                except pd.errors.EmptyDataError:
-                    st.error("Uploaded file has no readable data.")
-                except Exception as e:
-                    st.error(f"An error occurred while reading the file: {e}")
-            else:
-                st.success("Cleared product list.")
+            st.success("All product inputs and uploaded data cleared.")
