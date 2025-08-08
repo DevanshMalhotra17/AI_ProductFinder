@@ -55,7 +55,6 @@ with st.sidebar:
         """,
         unsafe_allow_html=True
     )
-
     pg = st.navigation(pages)
 
 # ============ Constants ============
@@ -105,7 +104,6 @@ def get_out(products):
         "After each product block add the Google search link for the product followed by '~'\n"
     )
 
-
     LLM_response = model.generate_content([prompt])
     text = LLM_response.text
 
@@ -139,9 +137,14 @@ def extract_products(df):
         name = str(row.get("product_name", "")).strip()
         if not name:
             continue
-        price_min = float(row.get("price_min", 0))
-        price_max = float(row.get("price_max", 0))
-        rating = float(row.get("rating", 0))
+        # Use a more robust check for numeric types
+        try:
+            price_min = float(row.get("price_min", 0)) if pd.notna(row.get("price_min")) else 0.0
+            price_max = float(row.get("price_max", 0)) if pd.notna(row.get("price_max")) else 0.0
+            rating = float(row.get("rating", 0)) if pd.notna(row.get("rating")) else 0.0
+        except (ValueError, TypeError):
+            continue
+
         context = str(row.get("context", ""))
         constraints = str(row.get("constraints", ""))
 
@@ -154,7 +157,7 @@ def extract_products(df):
             "constraints": constraints
         }
     return products
-
+    
 # --- Page Logic ---
 if pg.title == "Project Info":
     st.title("ℹ️ Project Information")
@@ -184,8 +187,8 @@ elif pg.title == "About Us":
             "image": "https://raw.githubusercontent.com/DevanshMalhotra17/AI_ProductFinder/main/assets/DevanshMalhotra.jpg",
             "contributions": """Led UI design and core feature implementation: CSV upload, context input, constraint fields,
             and AI prompt optimization. Ensured intuitive and user-friendly workflow.""",
-            "summary": """Aspiring AI engineer with strong experience in software development, algorithms, and robotics 
-            (FRC 1923). Skilled in Java and Python, with a focus on building intelligent systems. Intern at BetterMind Labs, 
+            "summary": """Aspiring AI engineer with strong experience in software development, algorithms, and robotics
+            (FRC 1923). Skilled in Java and Python, with a focus on building intelligent systems. Intern at BetterMind Labs,
             working on real-world AI applications and prompt engineering. Passionate about advancing practical AI-driven solutions.""",
             "linkedin": "https://www.linkedin.com/in/devansh-malhotra-825789314/",
             "github": "https://github.com/DevanshMalhotra17"
@@ -195,7 +198,7 @@ elif pg.title == "About Us":
             "image": "https://raw.githubusercontent.com/DevanshMalhotra17/AI_ProductFinder/main/assets/Haoxuan_Liu.jpg",
             "contributions": """Developed AI integration: dual API request system for recommendations and product links.
             Optimized backend logic for accurate outputs.""",
-            "summary": """Inspired by coding since middle school and have a decent understanding of both Java, Python, and HTML&CSS. 
+            "summary": """Inspired by coding since middle school and have a decent understanding of both Java, Python, and HTML&CSS.
             Holds certifications in Python and HTML&CSS and completed an internship at BetterMind Labs focusing on creating AI.""",
             "linkedin": "https://www.linkedin.com/in/haoxuan-liu",
             "github": "https://github.com/hxliufl"
@@ -205,7 +208,7 @@ elif pg.title == "About Us":
             "image": "https://raw.githubusercontent.com/DevanshMalhotra17/AI_ProductFinder/main/assets/Matthew_Yu.jpg",
             "contributions": """Enhanced input functionality: price range sliders and synchronization mechanisms.
             Improved overall UX for seamless integration.""",
-            "summary": """Experienced in Java, Python, and Wolfram Language, novice in HTML and CSS. 
+            "summary": """Experienced in Java, Python, and Wolfram Language, novice in HTML and CSS.
             Intern at BetterMind Labs with a focus on applying AI systems to real life.""",
             "linkedin": "https://www.linkedin.com/in/matthew-yu-6902a3302/",
             "github": "https://github.com/mattY-08"
@@ -228,34 +231,34 @@ else:
     st.title("AI ProductFinder")
     st.write("Get AI-powered product recommendations based on your budget, context, and constraints.")
 
+    # Initialize a counter for the file uploader key
+    if 'file_uploader_key_counter' not in st.session_state:
+        st.session_state.file_uploader_key_counter = 0
+
     if "products" not in st.session_state:
         st.session_state.products = {}
 
     st.subheader("📂 Upload Products via CSV (optional)")
-    uploaded_file = st.file_uploader("Upload CSV (columns: product_name, price_min, price_max, rating, context, constraints)", type=["csv"])
+    # We use a key that changes on reset to clear the widget
+    uploaded_file = st.file_uploader(
+        "Upload CSV (columns: product_name, price_min, price_max, rating, context, constraints)",
+        type=["csv"],
+        key=f'csv_uploader_{st.session_state.file_uploader_key_counter}'
+    )
+
     if uploaded_file:
         try:
-            try:
-                uploaded_file.seek(0)
-            except Exception:
-                pass
-
+            uploaded_file.seek(0)
             df = pd.read_csv(uploaded_file)
             if df.empty:
                 st.error("Uploaded file is empty or has no valid rows.")
             else:
-                # cache parsed dataframe and raw file bytes for later refresh
-                st.session_state["uploaded_df"] = df.copy()
-                st.session_state["uploaded_file_bytes"] = uploaded_file.getvalue()
-                # use df to populate products immediately
                 st.session_state.products = extract_products(df)
                 st.success("✅ Products added from CSV!")
         except pd.errors.EmptyDataError:
-            st.error("Uploaded file has no readable data (EmptyDataError). Make sure it's a valid CSV with headers.")
+            st.error("Uploaded file has no readable data. Make sure it's a valid CSV with headers.")
         except Exception as e:
             st.error(f"Error reading uploaded CSV: {e}")
-
-
 
     with st.expander("➕ Add a Product Manually", expanded=False):
         if "product_form" not in st.session_state:
@@ -319,7 +322,6 @@ else:
                 star_rating = st.feedback("stars")
                 if star_rating is not None:
                     form["rating"] = float(star_rating + 1)
-
             else:
                 form["rating"] = st.number_input("Numeric Rating", min_value=1.0, max_value=5.0, step=0.1, value=float(form["rating"]))
             if form["step"] == 3:
@@ -366,7 +368,7 @@ else:
             - Constraints: {details['constraints']}
             """)
 
-    colA, colC = st.columns([7, 1])
+    colA, colC = st.columns([5, 1])
     with colA:
         if st.button("🔍 Generate Recommendations"):
             if st.session_state.products:
@@ -377,10 +379,8 @@ else:
 
     with colC:
         if st.button("🔄 Reset"):
+            # Clear all relevant session state keys
             st.session_state.products = {}
-            st.session_state["uploaded_df"] = None
-            st.session_state["uploaded_file_bytes"] = None
-
             st.session_state.product_form = {
                 "step": 1,
                 "name": "",
@@ -392,5 +392,8 @@ else:
                 "context": "",
                 "constraints": ""
             }
+            # Increment the counter to change the key for the file uploader
+            st.session_state.file_uploader_key_counter += 1
 
-            st.success("All product inputs and uploaded data cleared.")
+            st.success("Form and product list cleared.")
+            st.rerun()
