@@ -13,17 +13,9 @@ Input your **budget**, **minimum rating** (via star selector), and **product cat
 
 Pulls data directly from a local `products.csv` file to provide real-time, tailored recommendations.
 
-### ⭐ Interactive Star Rating
-
-A smooth and intuitive visual star rating selector with accurate value mapping.
-
-### 🛍️ “Shop Now” Integration
+### 🛍️ “Browse” Integration
 
 Each recommended product includes a clickable button that searches it on **Google Shopping**.
-
-### 🎨 Clean UX
-
-Automatically clears old suggestions when new filters are applied, ensuring a seamless experience.
 
 ---
 
